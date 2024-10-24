@@ -1,0 +1,1019 @@
+---
+title: "Analyzing Single-Cell RNA Sequencing of Immune Cells in B16 Tumors"
+author: "Luis Fernando Nagano"
+date: "June 07, 2024"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    df_print: paged
+---
+
+## Overview
+
+In this document, I detail a comprehensive analysis of a publicly accessible single-cell RNA-sequencing dataset from Ishizuka et al. 2019. Utilizing the `Seurat` package in R, this dataset, generated via the 10X Genomics platform, focuses on tumor-infiltrating leukocytes extracted from mouse B16 tumors. The original study is accessible at: [PubMed](https://www.ncbi.nlm.nih.gov/pubmed/30559380).
+
+This guide aims to demonstrate the methodology for processing and interpreting single-cell RNA-seq data produced by the 10X Genomics system. Each step is thoroughly explained to assist researchers with foundational R knowledge in conducting their own single-cell experiments. Additionally, custom visualizations are provided to enhance data comprehension. This resource is intended to facilitate researchers in navigating and making sense of their single-cell RNA-seq data effectively.
+
+---
+
+## Required Libraries
+
+```{r message=FALSE}
+library(Seurat)
+library(tidyverse)
+library(future)
+```
+
+The analysis leverages `Seurat` version 3.0.2 for single-cell data processing. The `future` package enables parallel processing to expedite computationally intensive steps, while `tidyverse` offers a suite of tools for data manipulation and visualization.
+
+## Initializing the Seurat Object
+
+Data can be accessed at: [GEO Accession GSE110746](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE110746). Navigate to the bottom of the page to download the three essential files: `GSE110746_barcodes.tsv.gz`, `GSE110746_genes.tsv.gz`, and `GSE110746_matrix.mtx.gz`. These files represent the cellular barcodes, gene identifiers, and expression matrices, respectively, formatted by the 10X Genomics Cell Ranger pipeline.
+
+Use the `Read10X()` function to import these matrices. Ensure the file names are correctly formatted; for instance, remove the `GSE` prefix if necessary. After unzipping, place the files in a directory named "data" and specify this path in the `Read10X()` function. For Cell Ranger outputs, these files are typically found in the `outs/filtered_feature_bc_matrix` directory.
+
+# Data Download and Preparation
+
+## Creating Necessary Directories
+
+```{r create-directories}
+dir.create("raw_data/haining", recursive = TRUE)
+dir.create("output")
+```
+
+## Defining URLs for Data Download
+
+```{r define-urls}
+url_barcodes <- "https://ftp.ncbi.nlm.nih.gov/geo/series/GSE110nnn/GSE110746/suppl/GSE110746_barcodes.tsv.gz"
+url_genes <- "https://ftp.ncbi.nlm.nih.gov/geo/series/GSE110nnn/GSE110746/suppl/GSE110746_genes.tsv.gz"
+url_matrix <- "https://ftp.ncbi.nlm.nih.gov/geo/series/GSE110nnn/GSE110746/suppl/GSE110746_matrix.mtx.gz"
+```
+
+## Downloading Files to `raw_data/haining` Directory
+
+```{r download-files}
+download.file(url_barcodes, destfile = "raw_data/haining/GSE110746_barcodes.tsv.gz")
+download.file(url_genes, destfile = "raw_data/haining/GSE110746_genes.tsv.gz")
+download.file(url_matrix, destfile = "raw_data/haining/GSE110746_matrix.mtx.gz")
+```
+
+## Decompressing Files
+
+```{r decompress-files}
+gunzip("raw_data/haining/GSE110746_barcodes.tsv.gz", remove = TRUE)
+gunzip("raw_data/haining/GSE110746_genes.tsv.gz", remove = TRUE)
+gunzip("raw_data/haining/GSE110746_matrix.mtx.gz", remove = TRUE)
+```
+
+## Renaming Files (Optional)
+
+```{r rename-files}
+file.rename("raw_data/haining/GSE110746_barcodes.tsv", "raw_data/haining/barcodes.tsv")
+file.rename("raw_data/haining/GSE110746_genes.tsv", "raw_data/haining/genes.tsv")
+file.rename("raw_data/haining/GSE110746_matrix.mtx", "raw_data/haining/matrix.mtx")
+```
+
+# Setting Up the Working Environment
+
+```{r set-working-directory, eval=FALSE}
+setwd("C:/Users/bruep/OneDrive/Desktop/Single-Cell-Analysis")
+```
+
+# Reading the Data
+
+```{r}
+raw_data <- Read10X(data.dir = "raw_data/haining")
+```
+
+With the raw data loaded, create a Seurat object using `CreateSeuratObject()`.
+
+```{r}
+b16 <- CreateSeuratObject(counts = raw_data, min.cells = 3, min.features = 200, project = "b16", names.delim = "-", names.field = 2)
+```
+
+The parameters `min.cells` and `min.features` filter out genes expressed in fewer than three cells and cells expressing fewer than 200 genes, respectively. Adjust these thresholds based on the specific cell types under investigation.
+
+If the dataset originates from multiple samples, identifiers can be extracted using `names.delim` and `names.field`. For example, barcodes like `AAACCTGTCACATGCA-ADAR_S1` can be parsed to retrieve the sample identifier `ADAR_S1`.
+
+Verify the sample identifiers by inspecting the `@meta.data` slot:
+
+```{r}
+head(b16@meta.data)
+```
+
+Check the unique sample names to confirm proper assignment:
+
+```{r}
+unique(b16@meta.data$orig.ident)
+```
+
+Review the overall structure of the Seurat object:
+
+```{r}
+b16
+```
+
+In this object, each gene is labeled as a "feature," and each cell is treated as a "sample."
+
+## Filtering Cellular Data
+
+Enhance the `@meta.data` by calculating the proportion of mitochondrial and ribosomal gene expression using `PercentageFeatureSet()`. This helps identify and exclude dead or dying cells, which typically exhibit elevated mitochondrial gene expression.
+
+```{r eval=FALSE}
+# Verify gene selection for mitochondrial and ribosomal genes
+grep("^mt-", rownames(b16@assays$RNA@data), value = TRUE)
+grep("Rps|Rpl|Mrpl|Mrps", rownames(b16@assays$RNA@data), value = TRUE)
+```
+
+```{r percent-mito-ribo-nfeature-graphs, fig.width=10, fig.height=3}
+# Calculate percentages of mitochondrial and ribosomal genes
+b16[["percent.mito"]] <- PercentageFeatureSet(object = b16, pattern = "^mt-")
+b16[["percent.ribo"]] <- PercentageFeatureSet(object = b16, pattern = "Rps|Rpl|Mrpl|Mrps")
+
+# Generate scatter plots to visualize QC metrics
+plot1 <- FeatureScatter(object = b16, feature1 = "nCount_RNA", feature2 = "percent.mito") + 
+         theme(axis.text.x = element_text(angle = 45, hjust = 1))
+plot2 <- FeatureScatter(object = b16, feature1 = "nCount_RNA", feature2 = "nFeature_RNA") + 
+         theme(axis.text.x = element_text(angle = 45, hjust = 1))
+plot3 <- FeatureScatter(object = b16, feature1 = "nCount_RNA", feature2 = "percent.ribo") + 
+         theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+CombinePlots(plots = list(plot1, plot2, plot3), ncol = 3)
+```
+
+Cells exhibiting high mitochondrial and ribosomal gene expression are likely compromised and should be excluded:
+
+```{r}
+b16 <- subset(x = b16, subset = nFeature_RNA > 200 & nFeature_RNA < 8000 & percent.mito < 25 & percent.ribo < 40)
+```
+
+After filtering, confirm the reduction in cell count:
+
+```{r}
+b16
+```
+
+## Normalizing and Clustering the Data
+
+Proceed with normalization, identification of variable features, and scaling using Seurat's integrated functions. Utilize the `future` package for parallel processing to enhance efficiency.
+
+```{r eval=FALSE}
+b16 <- NormalizeData(b16, normalization.method = "LogNormalize", scale.factor = 10000)
+b16 <- FindVariableFeatures(b16, selection.method = "vst", nfeatures = 2000)
+all.genes <- rownames(b16)
+plan("multiprocess", workers = 4)
+b16 <- ScaleData(b16, features = all.genes, vars.to.regress = c("nCount_RNA", "percent.mito", "percent.ribo"))
+plan("multiprocess", workers = 1)
+```
+
+To expedite the knitting process, load a pre-processed object if available:
+
+```{r include=FALSE}
+# Load pre-processed Seurat object
+load("output/b16_all_v3.Robj")
+```
+
+Perform principal component analysis (PCA) to reduce dimensionality and identify key sources of variation:
+
+```{r}
+b16 <- RunPCA(b16, features = VariableFeatures(object = b16), ndims.print = 1:2)
+```
+
+Evaluate the number of principal components (PCs) to retain using an elbow plot:
+
+```{r scree-plot, fig.width=5, fig.height=3}
+ElbowPlot(object = b16, ndims = 50)
+```
+
+Select 40 PCs for downstream analysis and proceed with clustering and t-SNE visualization:
+
+```{r include=FALSE}
+# Load processed object for knitting
+load("output/b16_all_v3.Robj")
+```
+
+```{r eval=FALSE}
+b16 <- FindNeighbors(b16, dims = 1:40)
+b16 <- FindClusters(b16, resolution = c(0.2, 0.4, 0.6))
+b16 <- RunTSNE(b16, dims = 1:40)
+
+# Save the updated object for future reference
+# save(b16, file = "b16_all_v3.Robj")
+```
+
+The resolution parameter influences the granularity of clusters. Higher values yield more clusters, while lower values produce fewer. Assess various resolutions to determine the most biologically meaningful clustering.
+
+Visualize cluster assignments at different resolutions:
+
+```{r}
+head(b16@meta.data)
+```
+
+```{r compare-resolutions-b16-all, fig.width=14, fig.height=3.5}
+r02 <- DimPlot(b16, label = TRUE, reduction = "tsne", group.by = "RNA_snn_res.0.2") + labs(title = "Resolution 0.2")
+r04 <- DimPlot(b16, label = TRUE, reduction = "tsne", group.by = "RNA_snn_res.0.4") + labs(title = "Resolution 0.4")
+r06 <- DimPlot(b16, label = TRUE, reduction = "tsne", group.by = "RNA_snn_res.0.6") + labs(title = "Resolution 0.6")
+
+CombinePlots(plots = list(r02, r04, r06), ncol = 3)
+```
+
+Based on gene expression patterns, determine an optimal resolution that balances cluster specificity with biological relevance. In this analysis, a resolution of 0.6 is selected for further exploration.
+
+## Cell Type Annotation
+
+Identify cell types by examining cluster-specific marker genes using `FindAllMarkers()`. This step involves determining genes that are significantly upregulated in each cluster relative to others.
+
+```{r eval=FALSE}
+# Identify markers for each cluster
+plan("multiprocess", workers = 4)
+b16.markers <- FindAllMarkers(b16, only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25)
+plan("multiprocess", workers = 1)
+
+# Save markers for future use
+# save(b16.markers, file = "b16_all_markers_res06_v3.Robj")
+```
+
+```{r include=FALSE}
+# Load pre-computed markers
+load("output/b16_all_markers_res06_v3.Robj")
+```
+
+```{r}
+top_markers_all <- b16.markers %>% group_by(cluster) %>% top_n(n = 10, wt = avg_logFC)
+# Export markers if needed
+# write.csv(top_markers_all, file = "b16_all_markers_res06_v3.csv")
+top_markers_all
+```
+
+Assign cell type labels based on the top marker genes for each cluster:
+
+```{r labeled-tsne-plot-b16-all, fig.width=10, fig.height=5}
+# Define new cluster identifiers
+new.cluster.ids <- c(
+  "0- TAM 1",
+  "1- Monocyte",
+  "2- CD8 T cell",
+  "3- TAM 2",
+  "4- Melanocyte",
+  "5- TAM 3",
+  "6- cDC2",
+  "7- Melanocyte",
+  "8- cDC1",
+  "9- Migratory DC",
+  "10- NK",
+  "11- TAM 4",
+  "12- Treg",
+  "13- Melanocyte",
+  "14- Fibroblast",
+  "15- pDC",
+  "16- TAM 5"
+)
+
+b16.labeled <- b16
+names(new.cluster.ids) <- levels(b16.labeled)
+b16.labeled <- RenameIdents(b16.labeled, new.cluster.ids)
+
+# Plot labeled clusters
+DimPlot(b16.labeled, label = TRUE, reduction = "tsne")
+```
+
+Clusters are now annotated with specific cell types, facilitating downstream analysis and interpretation.
+
+## Refining Clusters: Subsetting and Re-Clustering
+
+Focus on immune cells by excluding non-immune populations such as melanocytes and fibroblasts. Verify the exclusion by checking CD45 (Ptprc) expression.
+
+```{r ptprc-featureplot-b16-all, fig.width=5, fig.height=3.5}
+FeaturePlot(b16.labeled, "Ptprc")
+```
+
+Quantify CD45 expression across clusters:
+
+```{r ptprc-vlnplot-b16-all, fig.width=8, fig.height=4.5}
+VlnPlot(b16.labeled, "Ptprc", pt.size = 0.5) + NoLegend()
+```
+
+Exclude non-immune clusters based on low CD45 expression:
+
+```{r remove-non-immune-tsne, fig.width=6, fig.height=4}
+# Exclude clusters 4, 7, 13, 14
+b16 <- subset(b16, idents = c(0:16)[-c(5,8,14,15)])
+DimPlot(b16, label = TRUE, reduction = "tsne")
+```
+
+Re-normalize, scale, and recluster the filtered dataset:
+
+```{r eval=FALSE}
+# Reprocess the subsetted data
+b16 <- NormalizeData(b16, normalization.method = "LogNormalize", scale.factor = 10000)
+b16 <- FindVariableFeatures(b16, selection.method = "vst", nfeatures = 2000)
+all.genes <- rownames(b16)
+plan("multiprocess", workers = 4)
+b16 <- ScaleData(b16, features = all.genes, vars.to.regress = c("nCount_RNA", "percent.mito", "percent.ribo"))
+plan("multiprocess", workers = 1)
+b16 <- RunPCA(b16, features = VariableFeatures(object = b16))
+b16 <- FindNeighbors(b16, dims = 1:40)
+b16 <- FindClusters(b16, resolution = c(0.6))
+b16 <- RunTSNE(b16, dims = 1:40)
+
+# Save the updated object
+# save(b16, file = "b16_immune_v3.Robj")
+```
+
+```{r include=FALSE}
+# Load the immune subset object
+load("output/b16_immune_v3.Robj")
+```
+
+```{r tsne-reclustered-b16-immune, fig.width=6, fig.height=4}
+DimPlot(b16, label = TRUE, reduction = "tsne")
+```
+
+Re-annotate cell types in the refined clusters:
+
+```{r}
+# Identify markers for the immune subset
+plan("multiprocess", workers = 4)
+b16.markers <- FindAllMarkers(b16, only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25)
+plan("multiprocess", workers = 1)
+
+# Save markers
+# save(b16.markers, file = "b16_immune_markers_res06_v3.Robj")
+```
+
+```{r include=FALSE}
+# Load immune markers
+load("output/b16_immune_markers_res06_v3.Robj")
+```
+
+```{r}
+top_markers_immune <- b16.markers %>% group_by(cluster) %>% top_n(n = 10, wt = avg_logFC)
+# Export markers if needed
+# write.csv(top_markers_immune, file = "b16_immune_markers_res06_v3.csv")
+top_markers_immune
+```
+
+Label the immune clusters accordingly:
+
+```{r labeled-tsne-b16-immune, fig.width = 10, fig.height = 5}
+new.cluster.ids <- c(
+  "0- Classical Monocyte",
+  "1- TAM 1",
+  "2- TAM 2",
+  "3- CD8 T cell",
+  "4- TAM 3",
+  "5- cDC2",
+  "6- Patrolling Monocyte",
+  "7- Treg",
+  "8- cDC1",
+  "9- NK cell",
+  "10- TAM 4",
+  "11- Migratory DC",
+  "12- pDC",
+  "13- TAM 5"
+)
+
+b16.labeled <- b16
+names(new.cluster.ids) <- levels(b16.labeled)
+b16.labeled <- RenameIdents(b16.labeled, new.cluster.ids)
+
+DimPlot(b16.labeled, label = TRUE, reduction = "tsne")
+```
+
+Reorder clusters for intuitive visualization:
+
+```{r}
+# Arrange clusters by cell type categories
+reordered.new.cluster.ids <- c(
+  "0- Classical Monocyte",
+  "6- Patrolling Monocyte",
+  "1- TAM 1",
+  "2- TAM 2",
+  "4- TAM 3",
+  "10- TAM 4",
+  "13- TAM 5",
+  "8- cDC1",
+  "5- cDC2",
+  "11- Migratory DC",
+  "12- pDC",
+  "3- CD8 T cell",
+  "7- Treg",
+  "9- NK cell"
+)
+
+b16.labeled@active.ident <- factor(b16.labeled@active.ident, levels = reordered.new.cluster.ids)
+
+DimPlot(b16.labeled, label = TRUE, reduction = "tsne")
+```
+
+Aggregate clusters for a broader overview:
+
+```{r}
+combined.cluster.ids <- c(
+  "Monocyte",
+  "TAM",
+  "TAM",
+  "CD8",
+  "TAM",
+  "cDC2",
+  "Monocyte",
+  "Treg",
+  "cDC1",
+  "NK",
+  "TAM",
+  "Migratory DC",
+  "pDC",
+  "TAM"
+)
+
+b16.combined <- b16
+names(combined.cluster.ids) <- levels(b16.combined)
+b16.combined <- RenameIdents(b16.combined, combined.cluster.ids)
+
+# Order clusters by myeloid and lymphoid lineages
+b16.combined@active.ident <- factor(b16.combined@active.ident, levels = c("TAM", "Monocyte", "cDC1", "cDC2", "pDC", "Migratory DC", "CD8", "Treg", "NK"))
+# Save aggregated identities in metadata
+b16.combined[["res06_aggregated"]] <- b16.combined@active.ident
+```
+
+Visualize the aggregated clusters:
+
+```{r aggregated-tsne-b16-combined, fig.width=6, fig.height=4}
+DimPlot(b16.combined, label = TRUE, reduction = "tsne")
+```
+
+Identify markers for aggregated clusters:
+
+```{r eval=FALSE}
+# Find markers for aggregated clusters
+plan("multiprocess", workers = 4)
+b16.markers <- FindAllMarkers(b16.combined, only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25)
+plan("multiprocess", workers = 1)
+
+# Save markers
+# save(b16.markers, file = "b16_aggregate_markers_res06_v3.Robj")
+```
+
+```{r include=FALSE}
+# Load aggregated markers
+load("output/b16_aggregate_markers_res06_v3.Robj")
+```
+
+```{r}
+top_markers_aggregate <- b16.markers %>% group_by(cluster) %>% top_n(n = 10, wt = avg_logFC)
+# Export markers if needed
+# write.csv(top_markers_aggregate, file = "b16_aggregate_markers_res06_v3.csv")
+top_markers_aggregate
+```
+
+With the Seurat object fully processed and annotated, proceed to generate visualizations for deeper insights.
+
+---
+
+## Seurat's Native Visualization Tools
+
+Seurat offers a range of visualization functions to explore cell composition and gene expression across clusters. Key questions addressed include:
+
+- Which cell populations express specific genes?
+- What is the proportion of each cell type within the dataset?
+- How do these proportions vary between ADAR1 KO and Control tumors?
+
+This section demonstrates Seurat's inherent visualization capabilities, followed by advanced custom visualizations tailored for detailed analysis.
+
+### 1. FeaturePlot
+
+`FeaturePlot()` visualizes the spatial distribution of gene expression on t-SNE plots.
+
+```{r featureplot-ccr2-with-tsne, fig.width=10, fig.height=3.5}
+fp <- FeaturePlot(b16.combined, "Ccr2", pt.size = 0.6)
+tp <- DimPlot(b16.combined, pt.size = 0.6, label = TRUE, reduction = "tsne")
+CombinePlots(plots = list(tp, fp))
+```
+
+Overlaying multiple genes:
+
+```{r featureplot-blend-ccr2-ccl2, fig.width=12, fig.height=3}
+FeaturePlot(b16.combined, c("Ccl2", "Ccr2"), blend = TRUE)
+```
+
+### 2. VlnPlot
+
+`VlnPlot()` generates violin plots to quantify gene expression across clusters.
+
+```{r vlnplot-ccr2, fig.width=7, fig.height=3}
+VlnPlot(b16.combined, "Ccr2", pt.size = 0.1)
+```
+
+### 3. RidgePlot
+
+`RidgePlot()` offers an alternative density-based visualization of gene expression.
+
+```{r ridgeplot-ccr2, fig.width=7, fig.height=3}
+RidgePlot(b16.combined, "Ccr2")
+```
+
+### 4. DotPlot
+
+`DotPlot()` facilitates comparison of multiple genes across clusters, indicating expression levels and the proportion of expressing cells.
+
+```{r dotplot-cell-specific-markers, fig.width=8, fig.height=4}
+cluster_specific_genes <- c("C1qa", "Apoe", "Ly6c2", "Ccr2", "Xcr1", "Clec9a", "Cd209a", "Clec4a4", "Siglech", "Ccr9", "Ccr7", "Fscn1", "Cd8a", "Cd3e", "Foxp3", "Il2ra", "Ncr1", "Klra4")
+
+DotPlot(b16.combined, features = rev(cluster_specific_genes), cols = "RdBu", plot.legend = TRUE) +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1))
+```
+
+Subset-specific comparisons:
+
+```{r dotplot-cd8-activation-exhaustion, fig.width=8, fig.height=3}
+cd8 <- subset(b16.combined, idents = "CD8")
+cd8 <- SetIdent(cd8, value = "orig.ident")
+
+t_cell_genes <- c("Entpd1","Havcr2", "Tigit", "Lag3","Pdcd1", "Batf","Tox","Id2","Ccl3","Prf1", "Fasl", "Gzmb","Gzmk",  "Ifng", "Ccl5","Ly6c2", "Cd69",  "Cxcr3", "Cd44", "Tcf7", "Ccr7", "S1pr1", "Lef1", "Il7r", "Sell")
+
+DotPlot(cd8, features = rev(t_cell_genes), cols = "RdBu", plot.legend = TRUE) +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1))
+```
+
+### 5. Heatmap
+
+`DoHeatmap()` visualizes gene expression across individual cells within clusters.
+
+```{r heatmap-cell-specific-markers}
+top_b16_markers <- b16.markers %>% group_by(cluster) %>% top_n(n = 5, wt = avg_logFC)
+
+DoHeatmap(b16.combined, cells = WhichCells(b16.combined, downsample = 50, seed = 1), features = top_b16_markers$gene, size = 3.5, angle = 15, hjust = 0)
+```
+
+### 6. FeatureScatter
+
+`FeatureScatter()` assesses the correlation between two genes within a cluster.
+
+```{r featurescatter-tox-gzmb, fig.width=6, fig.height=4}
+FeatureScatter(cd8, "Tox", "Gzmb") +
+  geom_smooth(method = "lm", se = FALSE)
+```
+
+---
+
+## Custom Visualization Techniques
+
+Enhance data exploration with custom functions designed to answer specific analytical questions.
+
+### 1. Cell Proportion Visualization
+
+Plot the percentage of total cells each cluster represents.
+
+```{r plot-celltype-proportions, fig.width=5, fig.height=3}
+plot_proportions <- function(seuratobj){
+  proportions <- table(seuratobj@active.ident) / length(seuratobj@active.ident) * 100
+  proportions <- as.data.frame(proportions)
+  ggplot(proportions, aes(x = Var1, y = Freq)) +
+    geom_bar(stat = "identity", aes(fill = Var1)) +
+    theme_classic() +
+    labs(x = NULL, y = "Percentage of Total Cells", title = "Cell Type Distribution") +
+    theme(
+      axis.text.x = element_text(angle = 45, hjust = 1, size = 12, color = "black"), 
+      axis.text.y = element_text(size = 12, color = "black"),
+      axis.title.y = element_text(size = 12),
+      legend.position = "none"
+    )
+}
+
+plot_proportions(b16.combined)
+```
+
+### 2. UMI Count Visualization
+
+Assess the distribution of unique molecular identifiers (UMIs) across cells.
+
+```{r umi-ncountrna-plot, fig.width=6, fig.height=4}
+umi_plot <- function(seuratobj) {
+  seuratobj[["tsne1"]] <- Embeddings(object = seuratobj, reduction = "tsne")[, "tSNE_1"]
+  seuratobj[["tsne2"]] <- Embeddings(object = seuratobj, reduction = "tsne")[, "tSNE_2"]
+  ggplot(seuratobj@meta.data, aes(x = tsne1, y = tsne2)) +
+    geom_point(aes(color = log(nCount_RNA))) +
+    scale_color_gradientn(colors = viridis::magma(10))
+}
+
+umi_plot(b16.combined)
+```
+
+Summarize metadata statistics:
+
+```{r}
+summarize_metadata <- function(seuratobject, group.by = "RNA_snn_res.0.6") {
+  seuratobject@meta.data %>% 
+    group_by_at(group.by) %>% 
+    summarize(
+      avg_UMI = mean(nCount_RNA),
+      avg_nFeature = mean(nFeature_RNA),
+      avg_percent.mito = mean(percent.mito),
+      avg_percent.ribo = mean(percent.ribo)
+    ) %>%
+    arrange(desc(avg_UMI))
+}
+
+summarize_metadata(b16.combined, group.by = "RNA_snn_res.0.6")
+```
+
+### 3. Gene Signature Visualization
+
+Overlay gene signature scores onto t-SNE plots.
+
+```{r signature-plot, fig.width=5.5, fig.height=4}
+signature_genes <- c("Havcr2", "Tigit", "Lag3","Pdcd1","Tox")
+
+signature_plot <- function(seuratobject, signature_genes){
+  sig_data <- as.data.frame(Embeddings(object = seuratobject, reduction = "tsne"))
+  sig_data$signature <- rowMeans(t(seuratobject@assays$RNA@scale.data[signature_genes, ]))
+  ggplot(sig_data, aes(tSNE_1, tSNE_2)) +
+    geom_point(aes(color = signature)) +
+    scale_color_gradientn(colors = topo.colors(8)) +
+    theme_classic()
+}
+
+signature_plot(b16.combined, signature_genes)
+```
+
+### 4. Cell Identification by Barcode
+
+Isolate and visualize specific cell subpopulations based on barcodes.
+
+```{r message=FALSE, warning=FALSE, results='hide'}
+# Extract CD8 T cells
+cd8 <- subset(b16.combined, idents = "CD8")
+
+# Re-cluster CD8 T cells
+cd8 <- FindNeighbors(cd8, dims = 1:40)
+cd8 <- FindClusters(cd8, resolution = 0.2)
+```
+
+```{r tsne-plot-cd8-subclustered, fig.width=4, fig.height=3}
+DimPlot(cd8, label = TRUE, reduction = "tsne")
+```
+
+Retrieve barcodes for a specific subcluster:
+
+```{r}
+cd8_cluster1_barcodes <- WhichCells(cd8, idents = 1)
+```
+
+Highlight specific cells on the t-SNE plot:
+
+```{r highlight-cells-barcode-tsne-plot, fig.width=10, fig.height=4}
+ta <- DimPlot(b16, label = TRUE, cells.highlight = cd8_cluster1_barcodes, reduction = "tsne") + 
+      labs(title = "Using cells.highlight")
+
+b16@meta.data$cd8_cluster1 <- ifelse(rownames(b16@meta.data) %in% cd8_cluster1_barcodes, TRUE, FALSE)
+tb <- DimPlot(b16, group.by = "cd8_cluster1", reduction = "tsne") + 
+      labs(title = "Adding to meta.data and using group.by")
+
+CombinePlots(plots = list(ta, tb))
+```
+
+Identify and analyze an isolated group of cells:
+
+```{r}
+b16[["tsne1"]] <- Embeddings(object = b16, reduction = "tsne")[, "tSNE_1"]
+b16[["tsne2"]] <- Embeddings(object = b16, reduction = "tsne")[, "tSNE_2"]
+
+top_right_barcodes <- rownames(b16@meta.data)[which(b16@meta.data$tsne1 > 25 & b16@meta.data$tsne2 > 25)]
+top_right_barcodes
+```
+
+```{r}
+DimPlot(b16, cells.highlight = top_right_barcodes, reduction = "tsne")
+```
+
+Assign a new identity to the isolated cells:
+
+```{r}
+levels(b16.combined@active.ident) <- c(levels(b16.combined@active.ident), "unknown")
+b16.combined@active.ident[top_right_barcodes] <- "unknown"
+```
+
+Verify the new cluster assignment:
+
+```{r}
+table(b16.combined@active.ident)
+```
+
+```{r tsne-plot-unknown-labeled, fig.width=5.7, fig.height=3.5}
+DimPlot(b16.combined, label = TRUE, reduction = "tsne")
+```
+
+Perform differential expression analysis for the new cluster:
+
+```{r eval=FALSE}
+unknown_markers <- FindMarkers(b16.combined, "unknown")
+# Save results
+# save(unknown_markers, file = "unknown_cluster_markers.Robj")
+```
+
+```{r include=FALSE}
+# Load unknown cluster markers
+load("output/unknown_cluster_markers.Robj")
+```
+
+```{r}
+unknown_markers[order(unknown_markers$avg_logFC, decreasing = TRUE)[1:10],]
+```
+
+Restore original cluster identities:
+
+```{r}
+b16.combined <- SetIdent(b16.combined, value = "res06_aggregated")
+```
+
+### 5. Percentage of Positive Cells per Cluster
+
+Determine the fraction of cells expressing a specific gene within each cluster.
+
+```{r warning=FALSE}
+get_percent_positive <- function(seuratobj, marker, idents = "all"){
+  seuratobj@meta.data$markerpos <- ifelse(seuratobj@assays$RNA@data[marker, ] > 0, 1, 0)
+  seuratobj@meta.data$active.ident <- as.character(seuratobj@active.ident)
+  if (idents != "all")
+    seuratobj@meta.data$active.ident[!(seuratobj@meta.data$active.ident %in% idents)] <- "Other"
+  summary_data <- seuratobj@meta.data %>% 
+    group_by(active.ident) %>% 
+    summarize(
+      proportion_cd45 = n() / nrow(seuratobj@meta.data) * 100,
+      proportion_markerpos = mean(markerpos) * 100
+    )
+  summary_data
+}
+
+get_percent_positive(b16.combined, "Ccr2")
+```
+
+Visualize the percentage of positive cells:
+
+```{r percent-positive-plot, fig.width=6, fig.height=3.5}
+plot_percent_positive <- function(seuratobj, marker, idents = "all") {
+  summary_data <- get_percent_positive(seuratobj, marker, idents)
+  ggplot(summary_data, aes(x = active.ident, y = proportion_markerpos)) +
+    geom_bar(aes(fill = active.ident), stat = "identity") +
+    labs(y = paste("Percentage Positive for", marker),
+         x = "Cell Type") +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1))
+}
+
+plot_percent_positive(b16.combined, "Ccr2")
+```
+
+### 6. Median-Based Gene Expression Splitting
+
+Categorize cells based on whether their expression of a gene is above or below the median.
+
+```{r median-split-by-gene-tsne, fig.width=5, fig.height=3}
+cd8 <- subset(b16.combined, idents = "CD8")
+
+median_split <- function(seuratobj, gene, method = "plot") {
+  gene_expression <- seuratobj@assays$RNA@data[gene, ]
+  median_split <- factor(ifelse(gene_expression >= median(gene_expression), paste(gene, "high", sep = "-"), paste(gene, "low", sep = "-")))
+  split_name <- paste(gene, "split", sep = ".")
+  seuratobj[[split_name]] <- median_split
+  if (method == "plot") {
+    DimPlot(seuratobj, group.by = split_name, reduction = "tsne")
+  } else if (method == "differential genes") {
+    seuratobj <- SetIdent(seuratobj, value = split_name)
+    de_results <- FindMarkers(seuratobj, paste(gene, "high", sep = "-"), paste(gene, "low", sep = "-"), min.pct = 0.25, logfc.threshold = 0.25)
+    de_results <- de_results[order(de_results$avg_logFC, decreasing = TRUE), ]
+    # Export results if needed
+    # write.csv(de_results, file = paste0(gene, "_high_vs_low_de_results.csv"))
+    de_results
+  } else {
+    print("Invalid method selection")
+  }
+}
+
+median_split(cd8, "Pdcd1")
+```
+
+Analyze differentially expressed genes between high and low expressors:
+
+```{r}
+cd8_pd1_de_genes <- median_split(cd8, "Pdcd1", "differential genes")
+head(cd8_pd1_de_genes)
+```
+
+## Comparative Analysis Across Groups
+
+Examine differences in cell composition and gene expression between ADAR1 KO and Control samples.
+
+### 1. Cell Proportion by Group
+
+Compare the distribution of cell types across ADAR1 KO and Control samples.
+
+```{r}
+get_group_proportions <- function(seuratobj, group.by = "active.ident") {
+  if (group.by == "active.ident") {
+    seuratobj[["active.ident"]] <- seuratobj@active.ident
+  }
+  total_populations <- seuratobj@meta.data %>% group_by(orig.ident) %>% summarize(total_pop = n())
+  count_populations <- seuratobj@meta.data %>% group_by_at(vars(group.by, "orig.ident")) %>% summarize(n = n())
+  count_populations <- left_join(count_populations, total_populations, by = "orig.ident")
+  count_populations <- count_populations %>% mutate(proportion = n / total_pop)
+  count_populations
+}
+
+get_group_proportions(b16.combined)
+```
+
+Visualize group-wise proportions:
+
+```{r group-celltype-proportion-dodge, fig.width=8, fig.height=4}
+plot_group_proportions <- function(seuratobj, graph.type = "dodge") {
+  count_populations <- get_group_proportions(seuratobj)
+  if (graph.type == "dodge") {
+    ggplot(count_populations, aes(x = active.ident, y = proportion)) +
+      geom_bar(aes(fill = orig.ident), stat = "identity", position = "dodge") +
+      theme(axis.text.x = element_text(angle = 45, hjust = 1))
+  } else if (graph.type == "stacked") {
+    ggplot(count_populations, aes(x = orig.ident, y = proportion)) +
+      geom_bar(aes(fill = active.ident), stat = "identity", position = "fill")
+  } else {
+    print("Invalid graph type")
+  }
+}
+
+plot_group_proportions(b16.combined, graph.type = "dodge")
+```
+
+Alternatively, view stacked proportions:
+
+```{r group-celltype-proportion-stacked, fig.width=5, fig.height=3}
+plot_group_proportions(b16.combined, graph.type = "stacked")
+```
+
+### 2. Heatmap of Sample Similarities
+
+Assess similarity in cell type composition between samples using correlation heatmaps.
+
+```{r heatmap-by-sample-proportions, fig.width=5, fig.height=3}
+plot_heatmap_proportions <- function(seuratobj, graph.type = "by.cell") {
+  count_populations <- get_group_proportions(seuratobj)
+  reformatted <- count_populations %>% reshape2::dcast(formula = orig.ident ~ active.ident, value.var = "proportion")
+  heatmap_matrix <- as.matrix(reformatted[, -1])
+  rownames(heatmap_matrix) <- reformatted[, 1]
+  if (graph.type == "by.cell") {
+    pheatmap::pheatmap(heatmap_matrix, scale = "column")
+  } else if (graph.type == "by.sample") {
+    pheatmap::pheatmap(cor(t(heatmap_matrix)))
+  } else {
+    print("Invalid graph type")
+  }
+}
+
+plot_heatmap_proportions(b16.combined, graph.type = "by.sample")
+```
+
+View cell type-specific abundance:
+
+```{r heatmap-by-celltype-proportions, fig.width=6, fig.height=4}
+plot_heatmap_proportions(b16.combined, graph.type = "by.cell")
+```
+
+### 3. Median-Based Splitting Across Groups
+
+Analyze gene expression patterns by grouping cells based on median expression levels.
+
+```{r median-split-by-group, fig.width=5, fig.height=3}
+proportions_median_split <- function(seuratobj, gene) {
+  gene_expression <- seuratobj@assays$RNA@data[gene, ]
+  median_split <- factor(ifelse(gene_expression >= median(gene_expression), paste(gene, "high", sep = "-"), paste(gene, "low", sep = "-")))
+  split_name <- paste(gene, "split", sep = ".")
+  seuratobj[[split_name]] <- median_split
+  
+  count_populations <- get_group_proportions(seuratobj, group.by = split_name)
+  
+  ggplot(count_populations, aes(x = orig.ident, y = proportion)) +
+    geom_bar(stat = "identity", aes(fill = split_name), position = "dodge") +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+    labs(x = "", y = "Proportion within Group")
+}
+
+proportions_median_split(b16.combined, "Ccr2")
+```
+
+### 4. Differential Expression Between Groups
+
+Identify genes differentially expressed between ADAR1 KO and Control samples within specific cell types.
+
+```{r eval=FALSE}
+de_groups <- c("CD8", "Monocyte")
+
+get_DE_genes <- function(seuratobj, de_groups) {
+  seuratobj[["group"]] <- str_split_fixed(seuratobj@meta.data$orig.ident, "_", 2)[, 1]
+  
+  for (item in de_groups) {
+    de_subset <- subset(seuratobj, idents = item)
+    de_subset <- SetIdent(de_subset, value = "group")
+    de_results <- FindMarkers(de_subset, "ADAR", "Control", min.pct = 0.25, logfc.threshold = 0.25)
+    write.csv(de_results[order(de_results$avg_logFC, decreasing = TRUE), ], file = paste0(item, "_ADAR_vs_Control_DE.csv"))
+  }
+}
+
+get_DE_genes(b16.combined, de_groups)
+```
+
+```{r}
+cd8_de <- read.csv("output/CD8_ADAR_vs_Control_DE.csv", header = TRUE, row.names = 1)
+head(cd8_de)
+```
+
+### 5. Gene Set Enrichment Analysis (GSEA)
+
+Evaluate the enrichment of predefined gene sets between ADAR1 KO and Control samples using the `fgsea` package.
+
+```{r message=FALSE, warning=FALSE}
+library(fgsea)
+```
+
+```{r}
+hallmark_pathway <- gmtPathways("pathway_files/h.all.v7.0.symbols.gmt.txt")
+head(names(hallmark_pathway))
+```
+
+Prepare the ranked list for GSEA:
+
+```{r}
+prepare_ranked_list <- function(ranked_list) { 
+  if (sum(duplicated(ranked_list$Gene.name)) > 0) {
+    ranked_list <- aggregate(. ~ Gene.name, FUN = mean, data = ranked_list)
+    ranked_list <- ranked_list[order(ranked_list$avg_logFC, decreasing = TRUE), ]
+  }
+  ranked_list <- na.omit(ranked_list)
+  ranked_list <- tibble::deframe(ranked_list)
+  ranked_list
+}
+
+cd8_ranked_list <- prepare_ranked_list(cd8_ranked_list)
+head(cd8_ranked_list)
+```
+
+Conduct GSEA:
+
+```{r}
+fgsea_results <- fgsea(
+  pathways = hallmark_pathway,
+  stats = cd8_ranked_list,
+  minSize = 15,
+  maxSize = 500,
+  nperm = 1000
+)
+
+fgsea_results %>% arrange(desc(NES)) %>% select(pathway, padj, NES) %>% head()
+```
+
+Plot enrichment for specific pathways:
+
+```{r gsea-ifn-gamma-response-curve, fig.width=5, fig.height=3}
+plot_enrichment <- function(pathway, ranked_list) {
+  plotEnrichment(hallmark_pathway[[pathway]], ranked_list) +
+    labs(title = pathway)
+}
+
+# Interferon Gamma Response
+plot_enrichment("HALLMARK_INTERFERON_GAMMA_RESPONSE", cd8_ranked_list)
+```
+
+```{r gsea-il2-stat5-signaling-curve, fig.width=5, fig.height=3}
+# IL2 STAT5 Signaling
+plot_enrichment("HALLMARK_IL2_STAT5_SIGNALING", cd8_ranked_list)
+```
+
+Visualize GSEA results with a waterfall plot:
+
+```{r gsea-waterfall-plot}
+waterfall_plot <- function(fsgea_results, graph_title) {
+  fsgea_results %>% 
+    mutate(short_name = str_split_fixed(pathway, "_", 2)[, 2]) %>%
+    ggplot(aes(reorder(short_name, NES), NES)) +
+      geom_bar(stat = "identity", aes(fill = padj < 0.05)) +
+      coord_flip() +
+      labs(x = "Hallmark Pathway", y = "Normalized Enrichment Score", title = graph_title) +
+      theme(
+        axis.text.y = element_text(size = 7), 
+        plot.title = element_text(hjust = 1)
+      )
+}
+
+waterfall_plot(fgsea_results, "Pathway Enrichment in ADAR1 KO vs Control CD8 T Cells")
+```
+
+---
+
+## Summary
+
+Through this analysis, several key insights emerge regarding the tumor microenvironment (TME) of the B16 melanoma model and the impact of ADAR1 knockout (KO):
+
+- **Myeloid Dominance**: The B16 model is predominantly infiltrated by myeloid cells, particularly various macrophage subsets (C1q⁺, APOE⁺, Ms4a7⁺).
+- **Diverse Immune Populations**: A wide array of immune cells are present, including multiple dendritic cell subtypes (cDC1, cDC2, pDC, Migratory DCs) and distinct T cell populations (CD8⁺ T cells, T-regulatory cells).
+- **ADAR1 KO Effects**: ADAR1 KO samples exhibit an increased frequency of CD8 T cells, a reduction in Arg1⁺ macrophages, and a slight uptick in T-regulatory cells. Notably, classical monocytes and certain TAM subsets (TAM 2, TAM 3) are less abundant in ADAR1 KO tumors.
+- **Enhanced Interferon Response**: GSEA reveals a significant enrichment of interferon gamma response pathways in CD8 T cells from ADAR1 KO samples, indicating a more robust cytotoxic inflammatory response.
+
+These findings provide a foundational understanding of the immune landscape within B16 tumors and highlight the modulatory role of ADAR1 in shaping immune cell populations and their functional states. Further exploration and comparative analyses with other tumor models could yield deeper biological insights.
