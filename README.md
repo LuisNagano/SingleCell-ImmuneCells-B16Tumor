@@ -1,8 +1,8 @@
 # Análise de RNA-Seq de Células Imunes Infiltrantes no Tumor B16
 
-**Autor:** Erick Lu
+**Autor:** Luis Fernando Nagano
 
-**Data:** 12 de fevereiro de 2020
+**Data:** June 07, 2024
 
 ## Sumário
 
