@@ -1,51 +1,47 @@
-# Análise de RNA-Seq de Células Imunes Infiltrantes no Tumor B16
+# Single-Cell RNA-Seq Analysis of Infiltrating Immune Cells in B16 Tumor
 
-**Autor:** Luis Fernando Nagano
+## Table of Contents
 
-**Data:** June 07, 2024
-
-## Sumário
-
-- [Visão Geral](#visão-geral)
-- [Instalação de Pacotes](#instalação-de-pacotes)
-- [Criação do Objeto Seurat](#criação-do-objeto-seurat)
-- [Filtragem de Células](#filtragem-de-células)
-- [Normalização de Dados e Agrupamento](#normalização-de-dados-e-agrupamento)
-- [Identificação de Tipos Celulares](#identificação-de-tipos-celulares)
-- [Subconjuntos e Reagrupamento](#subconjuntos-e-reagrupamento)
-- [Visualizações Nativas do Seurat](#visualizações-nativas-do-seurat)
+- [Overview](#overview)
+- [Package Installation](#package-installation)
+- [Creating the Seurat Object](#creating-the-seurat-object)
+- [Cell Filtering](#cell-filtering)
+- [Data Normalization and Clustering](#data-normalization-and-clustering)
+- [Cell Type Identification](#cell-type-identification)
+- [Subsetting and Reclustering](#subsetting-and-reclustering)
+- [Seurat Native Visualizations](#seurat-native-visualizations)
   - [1. FeaturePlot](#1-featureplot)
   - [2. VlnPlot](#2-vlnplot)
   - [3. RidgePlot](#3-ridgeplot)
   - [4. DotPlot](#4-dotplot)
   - [5. Heatmap](#5-heatmap)
   - [6. FeatureScatter](#6-featurescatter)
-- [Visualizações Personalizadas](#visualizações-personalizadas)
-  - [1. Gráfico de Proporção de Células](#1-gráfico-de-proporção-de-células)
-  - [2. Gráfico de Contagem de UMI](#2-gráfico-de-contagem-de-umi)
-  - [3. Gráfico de Assinatura Genética](#3-gráfico-de-assinatura-genética)
-  - [4. Identificação de Células por Barcode](#4-identificação-de-células-por-barcode)
-  - [5. Percentual de Células Positivas por Cluster](#5-percentual-de-células-positivas-por-cluster)
-  - [6. Divisão por Mediana de Genes](#6-divisão-por-mediana-de-genes)
-- [Análise por Grupo](#análise-por-grupo)
-  - [1. Gráfico de Proporção por Grupo](#1-gráfico-de-proporção-por-grupo)
-  - [2. Heatmap de Similaridade entre Amostras e Tipos Celulares](#2-heatmap-de-similaridade-entre-amostras-e-tipos-celulares)
-  - [3. Divisão por Mediana entre Grupos](#3-divisão-por-mediana-entre-grupos)
-  - [4. Análise de Expressão Diferencial entre Grupos](#4-análise-de-expressão-diferencial-entre-grupos)
-  - [5. Análise de Enriquecimento de Conjuntos de Genes (GSEA) entre Grupos](#5-análise-de-enriquecimento-de-conjuntos-de-genes-gsea-entre-grupos)
-- [Conclusões](#conclusões)
+- [Custom Visualizations](#custom-visualizations)
+  - [1. Cell Type Proportion Plot](#1-cell-type-proportion-plot)
+  - [2. UMI Count Plot](#2-umi-count-plot)
+  - [3. Gene Signature Plot](#3-gene-signature-plot)
+  - [4. Cell Identification by Barcode](#4-cell-identification-by-barcode)
+  - [5. Percentage of Positive Cells by Cluster](#5-percentage-of-positive-cells-by-cluster)
+  - [6. Median Gene Splitting](#6-median-gene-splitting)
+- [Group-wise Analysis](#group-wise-analysis)
+  - [1. Group-wise Cell Proportion Plot](#1-group-wise-cell-proportion-plot)
+  - [2. Heatmap of Sample and Cell Type Similarity](#2-heatmap-of-sample-and-cell-type-similarity)
+  - [3. Median Splitting Across Groups](#3-median-splitting-across-groups)
+  - [4. Differential Gene Expression Analysis Between Groups](#4-differential-gene-expression-analysis-between-groups)
+  - [5. Gene Set Enrichment Analysis (GSEA) Across Groups](#5-gene-set-enrichment-analysis-gsea-across-groups)
+- [Conclusions](#conclusions)
 
-## Visão Geral
+## Overview
 
-Este documento descreve uma análise passo a passo de um conjunto de dados de RNA-Seq de célula única disponível publicamente, conforme descrito por Ishizuka et al. (2019). Utilizamos o pacote R `Seurat` para processar e analisar os dados, que foram gerados utilizando a plataforma 10X Genomics a partir de leucócitos infiltrantes em tumores de camundongos B16. O artigo pode ser acessado em: [PubMed](https://www.ncbi.nlm.nih.gov/pubmed/30559380).
+This document provides a step-by-step analysis of a publicly available single-cell RNA-Seq dataset as described by Ishizuka et al. (2019). We utilized the R package `Seurat` to process and analyze the data, which were generated using the 10X Genomics platform from leukocytes infiltrating B16 mouse tumors. The article can be accessed at: [PubMed](https://www.ncbi.nlm.nih.gov/pubmed/30559380).
 
-O objetivo desta análise é fornecer um guia prático para pesquisadores com conhecimentos básicos em R, facilitando a compreensão e análise de experimentos de RNA-Seq de célula única. Incluímos também visualizações personalizadas para uma exploração mais aprofundada dos dados.
+The goal of this analysis is to offer a practical guide for researchers with basic R knowledge, facilitating the understanding and analysis of single-cell RNA-Seq experiments. We also include custom visualizations for a deeper exploration of the data.
 
-A versão renderizada deste notebook em R está disponível em: [Análise de RNA-Seq de Célula Única](https://erilu.github.io/single-cell-rnaseq-analysis/).
+A rendered version of this R notebook is available at: [Single-Cell RNA-Seq Analysis](https://erilu.github.io/single-cell-rnaseq-analysis/).
 
 ---
 
-## Instalação de Pacotes
+## Package Installation
 
 ```r
 library(Seurat)
@@ -53,29 +49,29 @@ library(tidyverse)
 library(future)
 ```
 
-Esta análise foi conduzida utilizando a versão 3.0.2 do `Seurat`. O pacote `future` é empregado para processamento paralelo, acelerando etapas que demandam mais tempo. O `tidyverse` fornece ferramentas eficientes para manipulação e visualização de dados.
+This analysis was conducted using `Seurat` version 3.0.2. The `future` package is employed for parallel processing, speeding up time-consuming steps. `tidyverse` provides efficient tools for data manipulation and visualization.
 
-## Criação do Objeto Seurat
+## Creating the Seurat Object
 
-Os dados podem ser obtidos em: [GEO - GSE110746](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE110746). Baixe os arquivos `GSE110746_barcodes.tsv.gz`, `GSE110746_genes.tsv.gz` e `GSE110746_matrix.mtx.gz`. Estes arquivos contêm as matrizes de códigos de barras celulares, nomes de genes e valores de expressão, respectivamente, gerados pelo software Cell Ranger da 10X Genomics.
+Data can be obtained from: [GEO - GSE110746](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE110746). Download the `GSE110746_barcodes.tsv.gz`, `GSE110746_genes.tsv.gz`, and `GSE110746_matrix.mtx.gz` files. These files contain the cell barcode matrices, gene names, and expression values, respectively, generated by 10X Genomics' Cell Ranger software.
 
 ```r
-# Carregar dados brutos
+# Load raw data
 raw_data <- Read10X(data.dir = "raw_data/haining")
 ```
 
-Após a leitura dos dados, criamos um objeto Seurat:
+After reading the data, we create a Seurat object:
 
 ```r
 b16 <- CreateSeuratObject(counts = raw_data, min.cells = 3, min.features = 200, project = "b16", names.delim = "-", names.field = 2)
 ```
 
-- `min.cells`: Filtra genes expressos em pelo menos 3 células.
-- `min.features`: Filtra células que expressam pelo menos 200 genes.
+- `min.cells`: Filters genes expressed in at least 3 cells.
+- `min.features`: Filters cells expressing at least 200 genes.
 
-Este filtro inicial ajuda a remover genes raros e células de baixa qualidade.
+This initial filtering helps remove rare genes and low-quality cells.
 
-Verifique os metadados do objeto:
+Check the object's metadata:
 
 ```r
 head(b16@meta.data)
@@ -89,22 +85,22 @@ unique(b16@meta.data$orig.ident)
 b16
 ```
 
-## Filtragem de Células
+## Cell Filtering
 
-Adicionamos informações sobre genes mitocondriais e ribossomais aos metadados e visualizamos a distribuição.
+We add mitochondrial and ribosomal gene information to the metadata and visualize their distribution.
 
 ```r
-# Identificar genes mitocondriais e ribossomais
+# Identify mitochondrial and ribosomal genes
 grep("^mt-", rownames(b16@assays$RNA@data), value = TRUE)
 grep("Rps|Rpl|Mrpl|Mrps", rownames(b16@assays$RNA@data), value = TRUE)
 ```
 
 ```r
-# Calcular porcentagens
+# Calculate percentages
 b16[["percent.mito"]] <- PercentageFeatureSet(object = b16, pattern = "^mt-")
 b16[["percent.ribo"]] <- PercentageFeatureSet(object = b16, pattern = "Rps|Rpl|Mrpl|Mrps")
 
-# Visualizar porcentagens
+# Visualize percentages
 plot1 <- FeatureScatter(object = b16, feature1 = "nCount_RNA", feature2 = "percent.mito") + theme(axis.text.x = element_text(angle = 45, hjust = 1))
 plot2 <- FeatureScatter(object = b16, feature1 = "nCount_RNA", feature2 = "nFeature_RNA") + theme(axis.text.x = element_text(angle = 45, hjust = 1))
 plot3 <- FeatureScatter(object = b16, feature1 = "nCount_RNA", feature2 = "percent.ribo") + theme(axis.text.x = element_text(angle = 45, hjust = 1))
@@ -112,23 +108,23 @@ plot3 <- FeatureScatter(object = b16, feature1 = "nCount_RNA", feature2 = "perce
 CombinePlots(plots = list(plot1, plot2, plot3), ncol = 3)
 ```
 
-![Gráficos de Porcentagem de Mitocôndria e Ribossomos](https://github.com/LuisNagano/SingleCell-ImmuneCells-B16Tumor/blob/main/figures/percent-mito-ribo-nfeature-graphs.jpeg)
+![Mitochondrial and Ribosomal Percentage Plots](https://github.com/LuisNagano/SingleCell-ImmuneCells-B16Tumor/blob/main/figures/percent-mito-ribo-nfeature-graphs.jpeg)
 
-Identificamos células com altas porcentagens de genes mitocondriais e ribossomais, possivelmente células comprometidas.
+We identify cells with high percentages of mitochondrial and ribosomal genes, possibly indicating compromised cells.
 
 ```r
 b16 <- subset(x = b16, subset = nFeature_RNA > 200 & nFeature_RNA < 8000 & percent.mito < 25 & percent.ribo < 40)
 ```
 
-Verifique a redução no número de células:
+Check the reduction in the number of cells:
 
 ```r
 b16
 ```
 
-## Normalização de Dados e Agrupamento
+## Data Normalization and Clustering
 
-Procedemos com a normalização, identificação de genes variáveis e escalonamento dos dados.
+Proceed with normalization, variable gene identification, and data scaling.
 
 ```r
 b16 <- NormalizeData(b16, normalization.method = "LogNormalize", scale.factor = 10000)
@@ -139,70 +135,70 @@ b16 <- ScaleData(b16, features = all.genes, vars.to.regress = c("nCount_RNA", "p
 plan("multiprocess", workers = 1)
 ```
 
-Realizamos a Análise de Componentes Principais (PCA) para redução de dimensionalidade:
+Perform Principal Component Analysis (PCA) for dimensionality reduction:
 
 ```r
 b16 <- RunPCA(b16, features = VariableFeatures(object = b16), ndims.print = 1:2)
 ```
 
-Avalie o número de PCs a reter utilizando o gráfico de cotovelo:
+Evaluate the number of PCs to retain using the elbow plot:
 
 ```r
 ElbowPlot(object = b16, ndims = 50)
 ```
 
-![Gráfico de Cotovelo](https://github.com/LuisNagano/SingleCell-ImmuneCells-B16Tumor/blob/main/figures/scree-plot.jpeg)
+![Elbow Plot](https://github.com/LuisNagano/SingleCell-ImmuneCells-B16Tumor/blob/main/figures/scree-plot.jpeg)
 
-Optamos por 40 PCs para as análises subsequentes e procedemos com o agrupamento e visualização via t-SNE:
+We opt for 40 PCs for subsequent analyses and proceed with clustering and t-SNE visualization:
 
 ```r
 b16 <- FindNeighbors(b16, dims = 1:40)
 b16 <- FindClusters(b16, resolution = c(0.2, 0.4, 0.6))
 b16 <- RunTSNE(b16, dims = 1:40)
 
-# Salvar objeto processado
+# Save processed object
 # save(b16, file = "b16_all_v3.Robj")
 ```
 
-Exploramos diferentes resoluções para determinar a granularidade dos clusters:
+We explore different resolutions to determine the granularity of clusters:
 
 ```r
-r02 <- DimPlot(b16, label = TRUE, reduction = "tsne", group.by = "RNA_snn_res.0.2") + labs(title = "Resolução 0.2")
-r04 <- DimPlot(b16, label = TRUE, reduction = "tsne", group.by = "RNA_snn_res.0.4") + labs(title = "Resolução 0.4")
-r06 <- DimPlot(b16, label = TRUE, reduction = "tsne", group.by = "RNA_snn_res.0.6") + labs(title = "Resolução 0.6")
+r02 <- DimPlot(b16, label = TRUE, reduction = "tsne", group.by = "RNA_snn_res.0.2") + labs(title = "Resolution 0.2")
+r04 <- DimPlot(b16, label = TRUE, reduction = "tsne", group.by = "RNA_snn_res.0.4") + labs(title = "Resolution 0.4")
+r06 <- DimPlot(b16, label = TRUE, reduction = "tsne", group.by = "RNA_snn_res.0.6") + labs(title = "Resolution 0.6")
 
 CombinePlots(plots = list(r02, r04, r06), ncol = 3)
 ```
 
-![Comparação de Resoluções](https://github.com/LuisNagano/SingleCell-ImmuneCells-B16Tumor/blob/main/figures/compare-resolutions.jpeg)
+![Resolution Comparison](https://github.com/LuisNagano/SingleCell-ImmuneCells-B16Tumor/blob/main/figures/compare-resolutions.jpeg)
 
-Optamos pela resolução 0.6 para equilibrar especificidade e relevância biológica.
+We choose a resolution of 0.6 to balance specificity and biological relevance.
 
-## Identificação de Tipos Celulares
+## Cell Type Identification
 
-Identificamos genes marcadores específicos para cada cluster:
+We identify specific marker genes for each cluster:
 
 ```r
-# Identificação de marcadores
+# Identify markers
 plan("multiprocess", workers = 4)
 b16.markers <- FindAllMarkers(b16, only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25)
 plan("multiprocess", workers = 1)
 
-# Salvar marcadores
+# Save markers
 # save(b16.markers, file = "b16_all_markers_res06_v3.Robj")
 ```
 
-Visualizamos os principais marcadores:
+Visualize the top markers:
 
 ```r
 top_markers_all <- b16.markers %>% group_by(cluster) %>% top_n(n = 10, wt = avg_logFC)
 top_markers_all
 ```
 
-Atribuímos tipos celulares com base nos marcadores identificados:
+We assign cell types based on the identified markers:
 
 ```r
-# Definição de novos identificadores de clusters
+# Define new cluster identities
 new.cluster.ids <- c(
   "0- TAM 1",
   "1- Monocyte",
@@ -230,38 +226,38 @@ b16.labeled <- RenameIdents(b16.labeled, new.cluster.ids)
 DimPlot(b16.labeled, label = TRUE, reduction = "tsne")
 ```
 
-![Gráfico T-SNE com Tipos Celulares](https://github.com/LuisNagano/SingleCell-ImmuneCells-B16Tumor/blob/main/figures/labeled-tsne-plot.jpeg)
+![Labeled t-SNE Plot](https://github.com/LuisNagano/SingleCell-ImmuneCells-B16Tumor/blob/main/figures/labeled-tsne-plot.jpeg)
 
-## Subconjuntos e Reagrupamento
+## Subsetting and Reclustering
 
-Focamos nas células imunes excluindo células não imunes como melanócitos e fibroblastos, verificando a expressão de CD45 (Ptprc):
+We focus on immune cells by excluding non-immune cells such as melanocytes and fibroblasts, verifying the expression of CD45 (Ptprc):
 
 ```r
 FeaturePlot(b16.labeled, "Ptprc")
 ```
 
-![FeaturePlot de Ptprc](https://github.com/LuisNagano/SingleCell-ImmuneCells-B16Tumor/blob/main/figures/ptprc-featureplot.jpeg)
+![FeaturePlot of Ptprc](https://github.com/LuisNagano/SingleCell-ImmuneCells-B16Tumor/blob/main/figures/ptprc-featureplot.jpeg)
 
 ```r
 VlnPlot(b16.labeled, "Ptprc", pt.size = 0.5) + NoLegend()
 ```
 
-![Violin Plot de Ptprc](https://github.com/LuisNagano/SingleCell-ImmuneCells-B16Tumor/blob/main/figures/ptprc-vlnplot.jpeg)
+![Violin Plot of Ptprc](https://github.com/LuisNagano/SingleCell-ImmuneCells-B16Tumor/blob/main/figures/ptprc-vlnplot.jpeg)
 
-Excluímos os clusters com baixa expressão de CD45:
+We exclude clusters with low CD45 expression:
 
 ```r
-# Remover clusters não imunes (4, 7, 13, 14)
+# Remove non-immune clusters (4, 7, 13, 14)
 b16 <- subset(b16, idents = c(0:16)[-c(5,8,14,15)])
 DimPlot(b16, label = TRUE, reduction = "tsne")
 ```
 
-![Remoção de Células Não Imunes](https://github.com/LuisNagano/SingleCell-ImmuneCells-B16Tumor/blob/main/figures/remove-non-immune-tsne.jpeg)
+![Non-Immune Cells Removed](https://github.com/LuisNagano/SingleCell-ImmuneCells-B16Tumor/blob/main/figures/remove-non-immune-tsne.jpeg)
 
-Reprocessamos os dados filtrados:
+We reprocess the filtered data:
 
 ```r
-# Normalizar, escalar e re-agrupar
+# Normalize, scale, and recluster
 b16 <- NormalizeData(b16, normalization.method = "LogNormalize", scale.factor = 10000)
 b16 <- FindVariableFeatures(b16, selection.method = "vst", nfeatures = 2000)
 all.genes <- rownames(b16)
@@ -273,31 +269,31 @@ b16 <- FindNeighbors(b16, dims = 1:40)
 b16 <- FindClusters(b16, resolution = 0.6)
 b16 <- RunTSNE(b16, dims = 1:40)
 
-# Salvar objeto
+# Save object
 # save(b16, file = "b16_immune_v3.Robj")
 ```
 
-Visualizamos novamente os clusters:
+Visualize the clusters again:
 
 ```r
 DimPlot(b16, label = TRUE, reduction = "tsne")
 ```
 
-![Gráfico T-SNE Reagrupado](https://github.com/LuisNagano/SingleCell-ImmuneCells-B16Tumor/blob/main/figures/tsne-reclustered-b16-immune.jpeg)
+![Reclustered t-SNE Plot](https://github.com/LuisNagano/SingleCell-ImmuneCells-B16Tumor/blob/main/figures/tsne-reclustered-b16-immune.jpeg)
 
-Reidentificamos os marcadores para o subconjunto imune:
+We re-identify markers for the immune subset:
 
 ```r
-# Identificação de marcadores no subconjunto imune
+# Identify markers in the immune subset
 plan("multiprocess", workers = 4)
 b16.markers <- FindAllMarkers(b16, only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25)
 plan("multiprocess", workers = 1)
 
-# Salvar marcadores
+# Save markers
 # save(b16.markers, file = "b16_immune_markers_res06_v3.Robj")
 ```
 
-Atribuímos novamente os tipos celulares:
+Assign cell types again:
 
 ```r
 new.cluster.ids <- c(
@@ -324,12 +320,12 @@ b16.labeled <- RenameIdents(b16.labeled, new.cluster.ids)
 DimPlot(b16.labeled, label = TRUE, reduction = "tsne")
 ```
 
-![Gráfico T-SNE Subconjunto Imune](https://github.com/LuisNagano/SingleCell-ImmuneCells-B16Tumor/blob/main/figures/labeled-tsne-b16-immune.jpeg)
+![Labeled Immune Subset t-SNE Plot](https://github.com/LuisNagano/SingleCell-ImmuneCells-B16Tumor/blob/main/figures/labeled-tsne-b16-immune.jpeg)
 
-Reordenamos os clusters para melhor visualização:
+Reorder clusters for better visualization:
 
 ```r
-# Reordenar clusters
+# Reorder clusters
 reordered.new.cluster.ids <- c(
   "0- Classical Monocyte",
   "6- Patrolling Monocyte",
@@ -352,9 +348,9 @@ b16.labeled@active.ident <- factor(b16.labeled@active.ident, levels = reordered.
 DimPlot(b16.labeled, label = TRUE, reduction = "tsne")
 ```
 
-![Clusters Reordenados](https://github.com/LuisNagano/SingleCell-ImmuneCells-B16Tumor/blob/main/figures/reordered-tsne-b16-immune.jpeg)
+![Reordered Clusters](https://github.com/LuisNagano/SingleCell-ImmuneCells-B16Tumor/blob/main/figures/reordered-tsne-b16-immune.jpeg)
 
-Agrupamos os clusters para uma visão geral:
+We aggregate clusters for an overview:
 
 ```r
 combined.cluster.ids <- c(
@@ -378,29 +374,29 @@ b16.combined <- b16
 names(combined.cluster.ids) <- levels(b16.combined)
 b16.combined <- RenameIdents(b16.combined, combined.cluster.ids)
 
-# Reordenar para hierarquia mieloide e linfóide
+# Reorder for myeloid and lymphoid hierarchy
 b16.combined@active.ident <- factor(b16.combined@active.ident, levels = c("TAM", "Monocyte", "cDC1", "cDC2", "pDC", "Migratory DC", "CD8", "Treg", "NK"))
-# Salvar identidades agregadas
+# Save aggregated identities
 b16.combined[["res06_aggregated"]] <- b16.combined@active.ident
 ```
 
-Visualizamos os clusters agregados:
+Visualize the aggregated clusters:
 
 ```r
 DimPlot(b16.combined, label = TRUE, reduction = "tsne")
 ```
 
-![Gráfico T-SNE Agrupado](https://github.com/LuisNagano/SingleCell-ImmuneCells-B16Tumor/blob/main/figures/aggregated-tsne-b16.jpeg)
+![Aggregated t-SNE Plot](https://github.com/LuisNagano/SingleCell-ImmuneCells-B16Tumor/blob/main/figures/aggregated-tsne-b16.jpeg)
 
-Identificamos marcadores para os clusters agregados:
+We identify markers for the aggregated clusters:
 
 ```r
-# Identificação de marcadores agregados
+# Identify aggregated markers
 plan("multiprocess", workers = 4)
 b16.markers <- FindAllMarkers(b16.combined, only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25)
 plan("multiprocess", workers = 1)
 
-# Salvar marcadores
+# Save markers
 # save(b16.markers, file = "b16_aggregate_markers_res06_v3.Robj")
 ```
 
@@ -409,11 +405,11 @@ top_markers_aggregate <- b16.markers %>% group_by(cluster) %>% top_n(n = 10, wt 
 top_markers_aggregate
 ```
 
-## Visualizações Nativas do Seurat
+## Seurat Native Visualizations
 
 ### 1. FeaturePlot
 
-`FeaturePlot()` permite visualizar a expressão de genes específicos no espaço reduzido do t-SNE.
+`FeaturePlot()` allows visualization of specific gene expression within the t-SNE reduced space.
 
 ```r
 fp <- FeaturePlot(b16.combined, "Ccr2", pt.size = 0.6)
@@ -421,31 +417,31 @@ tp <- DimPlot(b16.combined, pt.size = 0.6, label = TRUE, reduction = "tsne")
 CombinePlots(plots = list(tp, fp))
 ```
 
-![FeaturePlot de Ccr2](https://github.com/LuisNagano/SingleCell-ImmuneCells-B16Tumor/blob/main/figures/featureplot-ccr2.jpeg)
+![Ccr2 FeaturePlot](https://github.com/LuisNagano/SingleCell-ImmuneCells-B16Tumor/blob/main/figures/featureplot-ccr2.jpeg)
 
 ### 2. VlnPlot
 
-`VlnPlot()` gera gráficos de violino para quantificar a expressão gênica por cluster.
+`VlnPlot()` generates violin plots to quantify gene expression per cluster.
 
 ```r
 VlnPlot(b16.combined, "Ccr2", pt.size = 0.1)
 ```
 
-![Violin Plot de Ccr2](https://github.com/LuisNagano/SingleCell-ImmuneCells-B16Tumor/blob/main/figures/vlnplot-ccr2.jpeg)
+![Violin Plot of Ccr2](https://github.com/LuisNagano/SingleCell-ImmuneCells-B16Tumor/blob/main/figures/vlnplot-ccr2.jpeg)
 
 ### 3. RidgePlot
 
-`RidgePlot()` oferece uma visualização alternativa baseada em densidade da expressão gênica.
+`RidgePlot()` offers an alternative density-based visualization of gene expression.
 
 ```r
 RidgePlot(b16.combined, "Ccr2")
 ```
 
-![RidgePlot de Ccr2](https://github.com/LuisNagano/SingleCell-ImmuneCells-B16Tumor/blob/main/figures/ridgeplot-ccr2.jpeg)
+![RidgePlot of Ccr2](https://github.com/LuisNagano/SingleCell-ImmuneCells-B16Tumor/blob/main/figures/ridgeplot-ccr2.jpeg)
 
 ### 4. DotPlot
 
-`DotPlot()` facilita a comparação de múltiplos genes através dos clusters.
+`DotPlot()` facilitates the comparison of multiple genes across clusters.
 
 ```r
 cluster_specific_genes <- c("C1qa", "Apoe", "Ly6c2", "Ccr2", "Xcr1", "Clec9a", "Cd209a", "Clec4a4", "Siglech", "Ccr9", "Ccr7", "Fscn1", "Cd8a", "Cd3e", "Foxp3", "Il2ra", "Ncr1", "Klra4")
@@ -454,11 +450,11 @@ DotPlot(b16.combined, features = rev(cluster_specific_genes), cols = "RdBu", plo
   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1))
 ```
 
-![DotPlot de Genes Específicos](https://github.com/LuisNagano/SingleCell-ImmuneCells-B16Tumor/blob/main/figures/dotplot-cell-specific-markers.jpeg)
+![DotPlot of Specific Genes](https://github.com/LuisNagano/SingleCell-ImmuneCells-B16Tumor/blob/main/figures/dotplot-cell-specific-markers.jpeg)
 
 ### 5. Heatmap
 
-`DoHeatmap()` visualiza a expressão gênica em células individuais dentro dos clusters.
+`DoHeatmap()` visualizes gene expression across individual cells within clusters.
 
 ```r
 top_b16_markers <- b16.markers %>% group_by(cluster) %>% top_n(n = 5, wt = avg_logFC)
@@ -466,24 +462,24 @@ top_b16_markers <- b16.markers %>% group_by(cluster) %>% top_n(n = 5, wt = avg_l
 DoHeatmap(b16.combined, cells = WhichCells(b16.combined, downsample = 50, seed = 1), features = top_b16_markers$gene, size = 3.5, angle = 15, hjust = 0)
 ```
 
-![Heatmap de Marcadores Específicos](https://github.com/LuisNagano/SingleCell-ImmuneCells-B16Tumor/blob/main/figures/heatmap-cell-specific-markers.jpeg)
+![Heatmap of Specific Markers](https://github.com/LuisNagano/SingleCell-ImmuneCells-B16Tumor/blob/main/figures/heatmap-cell-specific-markers.jpeg)
 
 ### 6. FeatureScatter
 
-`FeatureScatter()` avalia a correlação entre dois genes dentro de um cluster.
+`FeatureScatter()` assesses the correlation between two genes within a cluster.
 
 ```r
 FeatureScatter(cd8, "Tox", "Gzmb") +
   geom_smooth(method = "lm", se = FALSE)
 ```
 
-![FeatureScatter de Tox vs Gzmb](https://github.com/LuisNagano/SingleCell-ImmuneCells-B16Tumor/blob/main/figures/featurescatter-tox-gzmb.jpeg)
+![FeatureScatter of Tox vs Gzmb](https://github.com/LuisNagano/SingleCell-ImmuneCells-B16Tumor/blob/main/figures/featurescatter-tox-gzmb.jpeg)
 
-## Visualizações Personalizadas
+## Custom Visualizations
 
-### 1. Gráfico de Proporção de Células
+### 1. Cell Type Proportion Plot
 
-Visualize a porcentagem de células que cada cluster representa no total.
+Visualize the percentage of cells each cluster represents in the total.
 
 ```r
 plot_proportions <- function(seuratobj){
@@ -492,7 +488,7 @@ plot_proportions <- function(seuratobj){
   ggplot(proporcao, aes(x = Var1, y = Freq)) +
     geom_bar(stat = "identity", aes(fill = Var1)) +
     theme_classic() +
-    labs(x = NULL, y = "Porcentagem Total de Células", title = "Distribuição por Tipo Celular") +
+    labs(x = NULL, y = "Total Cell Percentage", title = "Cell Type Distribution") +
     theme(
       axis.text.x = element_text(angle = 45, hjust = 1, size = 12, color = "black"), 
       axis.text.y = element_text(size = 12, color = "black"),
@@ -504,11 +500,11 @@ plot_proportions <- function(seuratobj){
 plot_proportions(b16.combined)
 ```
 
-![Proporção de Tipos Celulares](https://github.com/LuisNagano/SingleCell-ImmuneCells-B16Tumor/blob/main/figures/plot-celltype-proportions.jpeg)
+![Cell Type Proportion](https://github.com/LuisNagano/SingleCell-ImmuneCells-B16Tumor/blob/main/figures/plot-celltype-proportions.jpeg)
 
-### 2. Gráfico de Contagem de UMI
+### 2. UMI Count Plot
 
-Avalie a distribuição de UMIs por célula.
+Assess the distribution of UMIs per cell.
 
 ```r
 umi_plot <- function(seuratobj) {
@@ -522,9 +518,9 @@ umi_plot <- function(seuratobj) {
 umi_plot(b16.combined)
 ```
 
-![Gráfico de UMI](https://github.com/LuisNagano/SingleCell-ImmuneCells-B16Tumor/blob/main/figures/umi-ncountrna-plot.jpeg)
+![UMI Count Plot](https://github.com/LuisNagano/SingleCell-ImmuneCells-B16Tumor/blob/main/figures/umi-ncountrna-plot.jpeg)
 
-Resumo das estatísticas:
+Summary of statistics:
 
 ```r
 summarize_metadata <- function(seuratobject, group.by = "RNA_snn_res.0.6") {
@@ -542,9 +538,9 @@ summarize_metadata <- function(seuratobject, group.by = "RNA_snn_res.0.6") {
 summarize_metadata(b16.combined, group.by = "RNA_snn_res.0.6")
 ```
 
-### 3. Gráfico de Assinatura Genética
+### 3. Gene Signature Plot
 
-Sobreponha pontuações de assinaturas genéticas no t-SNE.
+Overlay gene signature scores on the t-SNE plot.
 
 ```r
 signature_genes <- c("Havcr2", "Tigit", "Lag3","Pdcd1","Tox")
@@ -561,68 +557,68 @@ signature_plot <- function(seuratobj, signature_genes){
 signature_plot(b16.combined, signature_genes)
 ```
 
-![Gráfico de Assinatura Genética](https://github.com/LuisNagano/SingleCell-ImmuneCells-B16Tumor/blob/main/figures/signature-plot.jpeg)
+![Gene Signature Plot](https://github.com/LuisNagano/SingleCell-ImmuneCells-B16Tumor/blob/main/figures/signature-plot.jpeg)
 
-### 4. Identificação de Células por Barcode
+### 4. Cell Identification by Barcode
 
-Isolar e visualizar subpopulações específicas de células.
+Isolate and visualize specific cell subpopulations.
 
 ```r
-# Extrair células CD8
+# Extract CD8 cells
 cd8 <- subset(b16.combined, idents = "CD8")
 
-# Reagrupar CD8
+# Reclustering CD8
 cd8 <- FindNeighbors(cd8, dims = 1:40)
 cd8 <- FindClusters(cd8, resolution = 0.2)
 
 DimPlot(cd8, label = TRUE, reduction = "tsne")
 ```
 
-![Subgrupo de CD8](https://github.com/LuisNagano/SingleCell-ImmuneCells-B16Tumor/blob/main/figures/tsne-plot-cd8-subclustered.jpeg)
+![CD8 Subclustered t-SNE Plot](https://github.com/LuisNagano/SingleCell-ImmuneCells-B16Tumor/blob/main/figures/tsne-plot-cd8-subclustered.jpeg)
 
-Extrair barcodes de um subgrupo específico:
+Extract barcodes of a specific subcluster:
 
 ```r
 cd8_cluster1_barcodes <- WhichCells(cd8, idents = 1)
 ```
 
-Realçar células no t-SNE:
+Highlight cells on the t-SNE:
 
 ```r
-ta <- DimPlot(b16, label = TRUE, cells.highlight = cd8_cluster1_barcodes, reduction = "tsne") + labs(title = "Usando cells.highlight")
+ta <- DimPlot(b16, label = TRUE, cells.highlight = cd8_cluster1_barcodes, reduction = "tsne") + labs(title = "Using cells.highlight")
 
 b16@meta.data$cd8_cluster1 <- ifelse(rownames(b16@meta.data) %in% cd8_cluster1_barcodes, TRUE, FALSE)
-tb <- DimPlot(b16, group.by = "cd8_cluster1", reduction = "tsne") + labs(title = "Adicionando a meta.data e usando group.by")
+tb <- DimPlot(b16, group.by = "cd8_cluster1", reduction = "tsne") + labs(title = "Adding to meta.data and using group.by")
 
 CombinePlots(plots = list(ta, tb))
 ```
 
-![Células Destacadas no t-SNE](https://github.com/LuisNagano/SingleCell-ImmuneCells-B16Tumor/blob/main/figures/highlight-cells-barcode-tsne-plot.jpeg)
+![Highlighted Cells on t-SNE](https://github.com/LuisNagano/SingleCell-ImmuneCells-B16Tumor/blob/main/figures/highlight-cells-barcode-tsne-plot.jpeg)
 
-Atribuir nova identidade a células isoladas:
+Assign a new identity to isolated cells:
 
 ```r
 levels(b16.combined@active.ident) <- c(levels(b16.combined@active.ident), "unknown")
 b16.combined@active.ident[top_right_barcodes] <- "unknown"
 ```
 
-Verificar novas identidades:
+Check new identities:
 
 ```r
 table(b16.combined@active.ident)
 ```
 
-![Distribuição de Identidades](https://github.com/LuisNagano/SingleCell-ImmuneCells-B16Tumor/blob/main/figures/unknown-cell-highlight-tsne-plot.jpeg)
+![Identity Distribution](#)
 
-Visualizar no t-SNE:
+Visualize on t-SNE:
 
 ```r
 DimPlot(b16.combined, label = TRUE, reduction = "tsne")
 ```
 
-![Cluster "Unknown"](https://github.com/LuisNagano/SingleCell-ImmuneCells-B16Tumor/blob/main/figures/tsne-plot-unknown-labeled.jpeg)
+![Unknown Cluster](https://github.com/LuisNagano/SingleCell-ImmuneCells-B16Tumor/blob/main/figures/tsne-plot-unknown-labeled.jpeg)
 
-Analisar expressão diferencial:
+Perform differential expression analysis:
 
 ```r
 unknown_markers <- FindMarkers(b16.combined, "unknown")
@@ -630,9 +626,9 @@ unknown_markers <- FindMarkers(b16.combined, "unknown")
 head(unknown_markers[order(unknown_markers$avg_logFC, decreasing = TRUE)[1:10], ])
 ```
 
-### 5. Percentual de Células Positivas por Cluster
+### 5. Percentage of Positive Cells by Cluster
 
-Calcule a fração de células que expressam um gene específico em cada cluster.
+Calculate the fraction of cells expressing a specific gene in each cluster.
 
 ```r
 get_percent_positive <- function(seuratobj, marker, idents = "all"){
@@ -658,18 +654,18 @@ plot_percent_positive <- function(seuratobj, marker, idents = "all") {
   ggplot(summary_data, aes(x = active.ident, y = proportion_markerpos)) +
     geom_bar(aes(fill = active.ident), stat = "identity") +
     labs(y = paste("Percent Positive for", marker),
-         x = "Tipo Celular") +
+         x = "Cell Type") +
     theme(axis.text.x = element_text(angle = 45, hjust = 1))
 }
 
 plot_percent_positive(b16.combined, "Ccr2")
 ```
 
-![Percentual de Células Positivas](https://github.com/LuisNagano/SingleCell-ImmuneCells-B16Tumor/blob/main/figures/percent-positive-plot.jpeg)
+![Percentage of Positive Cells](https://github.com/LuisNagano/SingleCell-ImmuneCells-B16Tumor/blob/main/figures/percent-positive-plot.jpeg)
 
-### 6. Divisão por Mediana de Genes
+### 6. Median Gene Splitting
 
-Classifique células com base na expressão acima ou abaixo da mediana para um gene específico.
+Classify cells based on above or below median expression for a specific gene.
 
 ```r
 cd8 <- subset(b16.combined, idents = "CD8")
@@ -685,31 +681,31 @@ median_split <- function(seuratobj, gene, method = "plot") {
     seuratobj <- SetIdent(seuratobj, value = split_name)
     de_results <- FindMarkers(seuratobj, paste(gene, "high", sep = "-"), paste(gene, "low", sep = "-"), min.pct = 0.25, logfc.threshold = 0.25)
     de_results <- de_results[order(de_results$avg_logFC, decreasing = TRUE), ]
-    # Exportar resultados se necessário
+    # Export results if needed
     # write.csv(de_results, file = paste0(gene, "_high_vs_low_de_results.csv"))
     de_results
   } else {
-    print("Método inválido")
+    print("Invalid method")
   }
 }
 
 median_split(cd8, "Pdcd1")
 ```
 
-![Divisão por Mediana](https://github.com/LuisNagano/SingleCell-ImmuneCells-B16Tumor/blob/main/figures/median-split-by-gene-tsne.jpeg)
+![Median Split](https://github.com/LuisNagano/SingleCell-ImmuneCells-B16Tumor/blob/main/figures/median-split-by-gene-tsne.jpeg)
 
-Analise genes diferencialmente expressos:
+Analyze differentially expressed genes:
 
 ```r
 cd8_pd1_de_genes <- median_split(cd8, "Pdcd1", "differential genes")
 head(cd8_pd1_de_genes)
 ```
 
-## Análise por Grupo
+## Group-wise Analysis
 
-### 1. Gráfico de Proporção por Grupo
+### 1. Group-wise Cell Proportion Plot
 
-Compare a distribuição de tipos celulares entre amostras ADAR1 KO e Controle.
+Compare the distribution of cell types between ADAR1 KO and Control samples.
 
 ```r
 get_group_proportions <- function(seuratobj, group.by = "active.ident") {
@@ -739,26 +735,26 @@ plot_group_proportions <- function(seuratobj, graph.type = "dodge") {
     ggplot(count_populations, aes(x = orig.ident, y = proportion)) +
       geom_bar(aes(fill = active.ident), stat = "identity", position = "fill")
   } else {
-    print("Tipo de gráfico inválido")
+    print("Invalid graph type")
   }
 }
 
 plot_group_proportions(b16.combined, graph.type = "dodge")
 ```
 
-![Proporção por Grupo - Dodge](https://github.com/LuisNagano/SingleCell-ImmuneCells-B16Tumor/blob/main/figures/group-celltype-proportion-dodge.jpeg)
+![Group-wise Cell Proportion - Dodge](https://github.com/LuisNagano/SingleCell-ImmuneCells-B16Tumor/blob/main/figures/group-celltype-proportion-dodge.jpeg)
 
-Gráfico empilhado:
+Stacked bar plot:
 
 ```r
 plot_group_proportions(b16.combined, graph.type = "stacked")
 ```
 
-![Proporção por Grupo - Empilhado](https://github.com/LuisNagano/SingleCell-ImmuneCells-B16Tumor/blob/main/figures/group-celltype-proportion-stacked.jpeg)
+![Group-wise Cell Proportion - Stacked](https://github.com/LuisNagano/SingleCell-ImmuneCells-B16Tumor/blob/main/figures/group-celltype-proportion-stacked.jpeg)
 
-### 2. Heatmap de Similaridade entre Amostras e Tipos Celulares
+### 2. Heatmap of Sample and Cell Type Similarity
 
-Avalie a similaridade na composição celular entre amostras.
+Assess similarity in cell composition between samples.
 
 ```r
 plot_heatmap_proportions <- function(seuratobj, graph.type = "by.cell") {
@@ -771,24 +767,24 @@ plot_heatmap_proportions <- function(seuratobj, graph.type = "by.cell") {
   } else if (graph.type == "by.sample") {
     pheatmap::pheatmap(cor(t(heatmap_matrix)))
   } else {
-    print("Tipo de gráfico inválido")
+    print("Invalid graph type")
   }
 }
 
 plot_heatmap_proportions(b16.combined, graph.type = "by.sample")
 ```
 
-![Heatmap por Amostra](https://github.com/LuisNagano/SingleCell-ImmuneCells-B16Tumor/blob/main/figures/heatmap-by-sample-proportions.jpeg)
+![Heatmap by Sample](https://github.com/LuisNagano/SingleCell-ImmuneCells-B16Tumor/blob/main/figures/heatmap-by-sample-proportions.jpeg)
 
 ```r
 plot_heatmap_proportions(b16.combined, graph.type = "by.cell")
 ```
 
-![Heatmap por Tipo Celular](https://github.com/LuisNagano/SingleCell-ImmuneCells-B16Tumor/blob/main/figures/heatmap-by-celltype-proportions.jpeg)
+![Heatmap by Cell Type](https://github.com/LuisNagano/SingleCell-ImmuneCells-B16Tumor/blob/main/figures/heatmap-by-celltype-proportions.jpeg)
 
-### 3. Divisão por Mediana entre Grupos
+### 3. Median Splitting Across Groups
 
-Classifique células com base na expressão de um gene e compare entre grupos.
+Classify cells based on gene expression and compare proportions across groups.
 
 ```r
 proportions_median_split <- function(seuratobj, gene) {
@@ -802,17 +798,17 @@ proportions_median_split <- function(seuratobj, gene) {
   ggplot(count_populations, aes(x = orig.ident, y = proportion)) +
     geom_bar(stat = "identity", aes(fill = split_name), position = "dodge") +
     theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
-    labs(x = "", y = "Proporção dentro do Grupo")
+    labs(x = "", y = "Proportion within Group")
 }
 
 proportions_median_split(b16.combined, "Ccr2")
 ```
 
-![Divisão por Mediana - Ccr2](https://github.com/LuisNagano/SingleCell-ImmuneCells-B16Tumor/blob/main/figures/median-split-by-group.jpeg)
+![Median Split - Ccr2](https://github.com/LuisNagano/SingleCell-ImmuneCells-B16Tumor/blob/main/figures/median-split-by-group.jpeg)
 
-### 4. Análise de Expressão Diferencial entre Grupos
+### 4. Differential Gene Expression Analysis Between Groups
 
-Identifique genes diferencialmente expressos entre amostras ADAR1 KO e Controle.
+Identify differentially expressed genes between ADAR1 KO and Control samples.
 
 ```r
 de_groups <- c("CD8", "Monocyte")
@@ -836,21 +832,21 @@ cd8_de <- read.csv("output/CD8_ADAR_vs_Control_DE.csv", header = TRUE, row.names
 head(cd8_de)
 ```
 
-### 5. Análise de Enriquecimento de Conjuntos de Genes (GSEA) entre Grupos
+### 5. Gene Set Enrichment Analysis (GSEA) Across Groups
 
-Avalie o enriquecimento de vias biológicas entre grupos usando o pacote `fgsea`.
+Evaluate the enrichment of biological pathways between groups using the `fgsea` package.
 
 ```r
 library(fgsea)
 ```
 
 ```r
-# Carregar vias do MSigDB
+# Load pathways from MSigDB
 hallmark_pathway <- gmtPathways("pathway_files/h.all.v7.0.symbols.gmt.txt")
 head(names(hallmark_pathway))
 ```
 
-Preparar a lista ranqueada:
+Prepare the ranked list:
 
 ```r
 prepare_ranked_list <- function(ranked_list) { 
@@ -867,7 +863,7 @@ cd8_ranked_list <- prepare_ranked_list(cd8_ranked_list)
 head(cd8_ranked_list)
 ```
 
-Executar GSEA:
+Run GSEA:
 
 ```r
 fgsea_results <- fgsea(
@@ -881,7 +877,7 @@ fgsea_results <- fgsea(
 fgsea_results %>% arrange(desc(NES)) %>% select(pathway, padj, NES) %>% head()
 ```
 
-Plotar enriquecimento para vias específicas:
+Plot enrichment for specific pathways:
 
 ```r
 plot_enrichment <- function(pathway, ranked_list) {
@@ -889,17 +885,17 @@ plot_enrichment <- function(pathway, ranked_list) {
     labs(title = pathway)
 }
 
-# Resposta à interferon gama
+# Interferon Gamma Response
 plot_enrichment("HALLMARK_INTERFERON_GAMMA_RESPONSE", cd8_ranked_list)
 
-# Sinalização IL2 STAT5
+# IL2 STAT5 Signaling
 plot_enrichment("HALLMARK_IL2_STAT5_SIGNALING", cd8_ranked_list)
 ```
 
-![Enriquecimento de Interferon Gama](https://github.com/LuisNagano/SingleCell-ImmuneCells-B16Tumor/blob/main/figures/gsea-ifn-gamma-response-curve.jpeg)
-![Enriquecimento de IL2 STAT5](https://github.com/LuisNagano/SingleCell-ImmuneCells-B16Tumor/blob/main/figures/gsea-il2-stat5-signaling-curve.jpeg)
+![Interferon Gamma Response Enrichment](https://github.com/LuisNagano/SingleCell-ImmuneCells-B16Tumor/blob/main/figures/gsea-ifn-gamma-response-curve.jpeg)
+![IL2 STAT5 Signaling Enrichment](https://github.com/LuisNagano/SingleCell-ImmuneCells-B16Tumor/blob/main/figures/gsea-il2-stat5-signaling-curve.jpeg)
 
-Visualizar resultados com um gráfico de cascata:
+Visualize results with a waterfall plot:
 
 ```r
 waterfall_plot <- function(fsgea_results, graph_title) {
@@ -908,27 +904,38 @@ waterfall_plot <- function(fsgea_results, graph_title) {
     ggplot(aes(reorder(short_name, NES), NES)) +
       geom_bar(stat = "identity", aes(fill = padj < 0.05)) +
       coord_flip() +
-      labs(x = "Vias Hallmark", y = "Normalized Enrichment Score", title = graph_title) +
+      labs(x = "Hallmark Pathway", y = "Normalized Enrichment Score", title = graph_title) +
       theme(
         axis.text.y = element_text(size = 7), 
         plot.title = element_text(hjust = 1)
       )
 }
 
-waterfall_plot(fgsea_results, "Enriquecimento de Vias em CD8 T Cells ADAR1 KO vs Controle")
+waterfall_plot(fgsea_results, "Pathway Enrichment in CD8 T Cells ADAR1 KO vs Control")
 ```
 
-![Waterfall Plot de GSEA](https://github.com/LuisNagano/SingleCell-ImmuneCells-B16Tumor/blob/main/figures/gsea-waterfall-plot.jpeg)
+![GSEA Waterfall Plot](https://github.com/LuisNagano/SingleCell-ImmuneCells-B16Tumor/blob/main/figures/gsea-waterfall-plot.jpeg)
 
 ---
 
-## Conclusões
+## Conclusions
 
-A análise revelou insights significativos sobre o microambiente tumoral (TME) do modelo de melanoma B16 e o impacto da knockout de ADAR1 (ADAR1 KO):
+The analysis provided significant insights into the tumor microenvironment (TME) of the B16 melanoma model and the impact of ADAR1 knockout (ADAR1 KO):
 
-- **Domínio Mielóide**: O modelo B16 é predominantemente infiltrado por células de origem mielóide, especialmente diversos subtipos de macrófagos (C1q⁺, APOE⁺, Ms4a7⁺).
-- **Diversidade Imune**: Diversos tipos de células imunes estão presentes, incluindo múltiplos subtipos de células dendríticas (cDC1, cDC2, pDC, Migratory DCs) e distintas populações de células T (CD8⁺ T cells, T-regulatory cells).
-- **Efeitos do ADAR1 KO**: Amostras ADAR1 KO apresentam aumento na frequência de células T CD8⁺, redução em macrófagos Arg1⁺ e ligeiro aumento em células T-regulatory. Monócitos clássicos e certos subtipos de TAM (TAM 2, TAM 3) são menos abundantes em tumores ADAR1 KO.
-- **Resposta de Interferon Aumentada**: GSEA indica um enriquecimento significativo das vias de resposta ao interferon gama em células T CD8⁺ de amostras ADAR1 KO, sugerindo uma resposta inflamatória citotóxica mais robusta.
+- **Myeloid Dominance**: The B16 model is predominantly infiltrated by myeloid-origin cells, especially various macrophage subtypes (C1q⁺, APOE⁺, Ms4a7⁺).
+- **Immune Diversity**: Multiple immune cell types are present, including various dendritic cell subtypes (cDC1, cDC2, pDC, Migratory DCs) and distinct T cell populations (CD8⁺ T cells, T-regulatory cells).
+- **Effects of ADAR1 KO**: ADAR1 KO samples show an increased frequency of CD8⁺ T cells, a reduction in Arg1⁺ macrophages, and a slight increase in T-regulatory cells. Classical monocytes and certain TAM subtypes (TAM 2, TAM 3) are less abundant in ADAR1 KO tumors.
+- **Enhanced Interferon Response**: GSEA indicates significant enrichment of the interferon gamma response pathways in CD8⁺ T cells from ADAR1 KO samples, suggesting a more robust cytotoxic inflammatory response.
 
-Esses achados fornecem uma compreensão fundamental do panorama imune dentro dos tumores B16 e destacam o papel modulador de ADAR1 na composição e nos estados funcionais das populações celulares imunes. Investigações adicionais e análises comparativas com outros modelos de tumor podem aprofundar ainda mais esses insights biológicos.
+These findings provide a fundamental understanding of the immune landscape within B16 tumors and highlight the modulatory role of ADAR1 in the composition and functional states of immune cell populations. Further investigations and comparative analyses with other tumor models may deepen these biological insights.
+
+## Contact
+
+For any questions, feedback, or collaboration opportunities, please contact:
+
+**Luis Fernando Nagano**
+
+- **Email**: nagano.luis@gmail.com
+- **LinkedIn**: [Luis Fernando Nagano](www.linkedin.com/in/luis-fernando-nagano-7585b82a8)
+- **GitHub**: [luisfernando](https://github.com/LuisNagano)
+
