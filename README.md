@@ -37,8 +37,6 @@ This document provides a step-by-step analysis of a publicly available single-ce
 
 The goal of this analysis is to offer a practical guide for researchers with basic R knowledge, facilitating the understanding and analysis of single-cell RNA-Seq experiments. We also include custom visualizations for a deeper exploration of the data.
 
-A rendered version of this R notebook is available at: [Single-Cell RNA-Seq Analysis](https://erilu.github.io/single-cell-rnaseq-analysis/).
-
 ---
 
 ## Package Installation
